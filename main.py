@@ -1,4 +1,5 @@
 import librosa
+import numpy as np
 import pandas as pd
 
 
@@ -49,5 +50,27 @@ def trim_audios(x, top_db=30, hop_length=50):
     return x
 
 
+def convert_to_mfcc(x, srr, max_pad_len=215):
+    """convert the audio signal to MFCC
+
+    Args:
+        x (pandas dataFrame): our data set
+        srr (int): sample rate
+        max_pad_len (int, optional): maximum width of MFCC. all MFCCs will be in width of max_pad_len. Defaults to 215.
+
+    Returns:
+        pandas dataFrame: our data set
+    """
+    for index, row in x.iterrows():
+        mfcc = librosa.feature.mfcc(y=row["Signal"], sr=srr)
+        pad_width = max_pad_len - mfcc.shape[1]
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
+
+        x.at[index, "Signal"] = mfcc
+
+    return x
+
+
 X, Y, srr = read_data()
-X_trimed = trim_audios(X.copy())
+X_trimed = trim_audios(X.copy(), top_db=10, hop_length=10)
+X_mfcc = convert_to_mfcc(X_trimed.copy(), srr)
