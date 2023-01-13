@@ -2,3 +2,5 @@
 *.pdf
 *.zip
 .vscode
+/dsl_data
+*.wav
