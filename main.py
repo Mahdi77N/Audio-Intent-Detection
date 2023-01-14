@@ -115,9 +115,84 @@ def convert_y_to_oneHot(y):
     # print(tt)
 
 
+def get_cnn_model(input_shape, num_classes):
+    model = Sequential()
+
+    model.add(
+        Conv2D(
+            32,
+            kernel_size=(2, 2),
+            activation="relu",
+            input_shape=input_shape,
+            strides=(1, 2),
+            padding="same",
+        )
+    )
+    model.add(BatchNormalization())
+
+    model.add(
+        Conv2D(
+            48, kernel_size=(2, 2), activation="relu", strides=(1, 2), padding="same"
+        )
+    )
+    model.add(BatchNormalization())
+
+    model.add(
+        Conv2D(
+            120, kernel_size=(2, 2), activation="relu", strides=(1, 2), padding="same"
+        )
+    )
+    model.add(BatchNormalization())
+
+    # model.add(MaxPooling2D(pool_size=(2, 2)))
+    # model.add(Dropout(0.25))
+
+    model.add(Flatten())
+
+    model.add(Dense(128, activation="relu"))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.15))
+    model.add(Dense(64, activation="relu"))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.2))
+    model.add(Dense(num_classes, activation="softmax"))
+    model.compile(
+        loss=keras.losses.categorical_crossentropy,
+        optimizer=keras.optimizers.Adam(),
+        metrics=["accuracy"],
+    )
+
+    return model
+
+
 X, Y, srr = read_data()
 X_trimed = trim_audios(X.copy(), top_db=10, hop_length=10)
 X_mfcc = convert_to_mfcc(X_trimed.copy(), srr)
-
 X_n, Y_n = convert_to_numpy(X_mfcc, Y, ["Signal"], ["intention"])
 y_oneHpt, le = convert_y_to_oneHot(Y_n)
+
+dim_1 = X_n.shape[1]
+dim_2 = X_n.shape[2]
+channels = 1
+classes = y_oneHpt.shape[1]
+X_n = X_n.reshape((X_n.shape[0], dim_1, dim_2, channels))
+input_shape = (dim_1, dim_2, channels)
+
+cnn_model = get_cnn_model(input_shape, classes)
+print(cnn_model.summary())
+
+keras_callback = keras.callbacks.TensorBoard(
+    log_dir="./Graph", histogram_freq=1, write_graph=True, write_images=True
+)
+checkpointer = ModelCheckpoint(
+    filepath="./audio_classification.hdf5", verbose=1, save_best_only=True
+)
+h = cnn_model.fit(
+    X_n,
+    y_oneHpt,
+    batch_size=8,
+    epochs=100,
+    verbose=1,
+    validation_split=0.15,
+    callbacks=[keras_callback, checkpointer],
+)
