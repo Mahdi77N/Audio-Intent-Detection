@@ -1,6 +1,8 @@
 import librosa
 import numpy as np
 import pandas as pd
+from keras.utils.np_utils import to_categorical
+from sklearn.preprocessing import LabelEncoder
 
 
 def read_data(csv_path="./dsl_data/development.csv"):
@@ -71,6 +73,51 @@ def convert_to_mfcc(x, srr, max_pad_len=215):
     return x
 
 
+def convert_to_numpy(x, y, x_columns, y_columns):
+    """Convert our data from pandas dataFrame to numpy array. Also, will drop all columns execpt the x_columns and y_columns
+
+    Args:
+        x (pandas dataFrame): our train set's features
+        y (pandas dataFrame): train set's classes
+        x_columns (array): features in train set that we want to train the model with them.
+        y_columns (array): one of three classes, from "object", "action", and "intention".
+
+    Returns:
+        numpay arrays: will return x and y in numpy arrays and only with specified columns
+    """
+    x_temp = x[x_columns]
+    x_temp_2 = np.array([x_temp.loc[i]["Signal"] for i in range(len(x_temp))])
+
+    y_temp = y[y_columns]
+    y_temp = y_temp.to_numpy()
+
+    return x_temp_2, y_temp
+
+
+def convert_y_to_oneHot(y):
+    """encode the classes from strings to oneHot
+
+    Args:
+        y (numpy array): train set's classes
+
+    Returns:
+        numpy array: train set's classes in oneHot format.
+        Label encoder Object: in order to be able to inverse oneHot to strings when we have the results.
+
+    """
+    le = LabelEncoder()
+    temp = le.fit_transform(y)
+    y_oneHot = to_categorical(temp, num_classes=max(temp) + 1)
+
+    return y_oneHot, le
+
+    # tt = le.inverse_transform(t)
+    # print(tt)
+
+
 X, Y, srr = read_data()
 X_trimed = trim_audios(X.copy(), top_db=10, hop_length=10)
 X_mfcc = convert_to_mfcc(X_trimed.copy(), srr)
+
+X_n, Y_n = convert_to_numpy(X_mfcc, Y, ["Signal"], ["intention"])
+y_oneHpt, le = convert_y_to_oneHot(Y_n)
