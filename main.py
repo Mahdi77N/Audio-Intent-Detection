@@ -1,11 +1,27 @@
+from math import ceil
+
+import keras
 import librosa
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from keras.layers import (
+    BatchNormalization,
+    Conv2D,
+    Dense,
+    Dropout,
+    Flatten,
+    GlobalAveragePooling2D,
+    MaxPooling2D,
+)
+from keras.models import Sequential
 from keras.utils.np_utils import to_categorical
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from tensorflow.keras.callbacks import ModelCheckpoint
 
 
-def read_data(csv_path="./dsl_data/development.csv"):
+def read_data(csv_path="./dsl_data/development.csv", data="train"):
     """Read the data, based on the "development.csv" file. it will read the audio files, and return two pandas dataFrame, x and y.
        it will not normalize the data. also will not change the data to categorical.
 
@@ -18,18 +34,22 @@ def read_data(csv_path="./dsl_data/development.csv"):
         int: sample rate
     """
 
-    development_pd = pd.read_csv(csv_path)  # .drop(["Id"], axis=1)
+    development_pd = pd.read_csv(csv_path)
     development_pd["Signal"] = ""
 
     for index, row in development_pd.iterrows():
         wave, srr = librosa.load(row["path"], mono=True, sr=None)
         development_pd.at[index, "Signal"] = wave
 
-    x = development_pd.drop(["Id", "action", "object", "path"], axis=1)
-    y = development_pd[["action", "object"]]
-    y["intention"] = development_pd["action"] + development_pd["object"]
+    if data == "train":
+        x = development_pd.drop(["Id", "action", "object", "path"], axis=1)
+        y = development_pd[["action", "object"]]
+        y["intention"] = development_pd["action"] + development_pd["object"]
+        return x, y, srr
 
-    return x, y, srr
+    else:
+        x = development_pd.drop(["Id", "path"], axis=1)
+        return x, srr
 
 
 def trim_audios(x, top_db=30, hop_length=50):
@@ -52,7 +72,7 @@ def trim_audios(x, top_db=30, hop_length=50):
     return x
 
 
-def convert_to_mfcc(x, srr, max_pad_len=215):
+def convert_to_mfcc(x, srr, max_audio_len=3):
     """convert the audio signal to MFCC
 
     Args:
@@ -64,11 +84,12 @@ def convert_to_mfcc(x, srr, max_pad_len=215):
         pandas dataFrame: our data set
     """
     for index, row in x.iterrows():
-        mfcc = librosa.feature.mfcc(y=row["Signal"], sr=srr)
-        pad_width = max_pad_len - mfcc.shape[1]
+        mfcc = librosa.feature.mfcc(row["Signal"], sr=srr)
+        max_pad_len = (max_audio_len * srr) / 512
+        pad_width = ceil(max_pad_len - mfcc.shape[1])
         mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
 
-        x.at[index, "Signal"] = mfcc
+        x.at[index, "Signal"] = np.array(mfcc)
 
     return x
 
@@ -86,7 +107,11 @@ def convert_to_numpy(x, y, x_columns, y_columns):
         numpay arrays: will return x and y in numpy arrays and only with specified columns
     """
     x_temp = x[x_columns]
+    # x_temp = x_temp.to_numpy()
+    # print(x_temp)
+    print(len(x_temp))
     x_temp_2 = np.array([x_temp.loc[i]["Signal"] for i in range(len(x_temp))])
+    # print(x_temp.shape)
 
     y_temp = y[y_columns]
     y_temp = y_temp.to_numpy()
@@ -111,8 +136,9 @@ def convert_y_to_oneHot(y):
 
     return y_oneHot, le
 
-    # tt = le.inverse_transform(t)
-    # print(tt)
+
+# tt = le.inverse_transform(t)
+# print(tt)
 
 
 def get_cnn_model(input_shape, num_classes):
@@ -165,9 +191,27 @@ def get_cnn_model(input_shape, num_classes):
     return model
 
 
+def remove_outliers(x, y, max_length=3):
+    t = []
+    for index, row in X_trimed.iterrows():
+        t.append(librosa.get_duration(row["Signal"], sr=srr))
+
+    ouliers_index = np.where(np.array(t) > 3)
+
+    x_removed_ouliers = x.copy().drop(ouliers_index[0], axis=0)
+    y_removed_ouliers = y.copy().drop(ouliers_index[0], axis=0)
+
+    x_removed_ouliers = x_removed_ouliers.reset_index()
+    y_removed_ouliers = y_removed_ouliers.reset_index()
+    return x_removed_ouliers, y_removed_ouliers
+
+
 X, Y, srr = read_data()
 X_trimed = trim_audios(X.copy(), top_db=10, hop_length=10)
-X_mfcc = convert_to_mfcc(X_trimed.copy(), srr)
+X_no_ouliers, y_no_ouliers = remove_outliers(X_trimed, Y)
+X_mfcc = convert_to_mfcc(X_no_ouliers, srr)
+X_mfcc = X_mfcc.reset_index()
+y_no_ouliers = y_no_ouliers.reset_index()
 X_n, Y_n = convert_to_numpy(X_mfcc, Y, ["Signal"], ["intention"])
 y_oneHpt, le = convert_y_to_oneHot(Y_n)
 
