@@ -196,13 +196,13 @@ def remove_outliers(x, y, max_length=3):
     for index, row in X_trimed.iterrows():
         t.append(librosa.get_duration(row["Signal"], sr=srr))
 
-    ouliers_index = np.where(np.array(t) > 3)
+    ouliers_index = np.where(np.array(t) > max_length)
 
     x_removed_ouliers = x.copy().drop(ouliers_index[0], axis=0)
     y_removed_ouliers = y.copy().drop(ouliers_index[0], axis=0)
 
-    x_removed_ouliers = x_removed_ouliers.reset_index()
-    y_removed_ouliers = y_removed_ouliers.reset_index()
+    x_removed_ouliers = x_removed_ouliers.reset_index(drop=True)
+    y_removed_ouliers = y_removed_ouliers.reset_index(drop=True)
     return x_removed_ouliers, y_removed_ouliers
 
 
